@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ENV_NAME="lil_llama_index"
+
+echo "========================================="
+echo " Setting up LlamaIndex Development"
+echo "========================================="
+
+# ---------------------------------------------------
+# Check Conda
+# ---------------------------------------------------
+
+if ! command -v conda &> /dev/null; then
+    echo "Conda is not installed."
+    echo "Install Miniconda or Anaconda first."
+    exit 1
+fi
+
+CONDA_BASE=$(conda info --base)
+source "$CONDA_BASE/etc/profile.d/conda.sh"
+
+echo "Using Conda at:"
+echo "$CONDA_BASE"
+
+# ---------------------------------------------------
+# Configure channels
+# ---------------------------------------------------
+
+conda config --add channels conda-forge 2>/dev/null || true
+conda config --set channel_priority strict
+
+# ---------------------------------------------------
+# Create environment
+# ---------------------------------------------------
+
+if conda env list | grep -q "^${ENV_NAME}\s"; then
+    echo "Environment already exists."
+else
+    echo "Creating environment..."
+    conda create -n "$ENV_NAME" python=3.11 -y
+fi
+
+conda activate "$ENV_NAME"
+
+# ---------------------------------------------------
+# Upgrade packaging tools
+# ---------------------------------------------------
+
+python -m pip install --upgrade \
+    pip \
+    setuptools \
+    wheel
+
+# ---------------------------------------------------
+# Install Jupyter
+# ---------------------------------------------------
+
+conda install -c conda-forge \
+    jupyterlab \
+    notebook \
+    ipykernel \
+    python-dotenv \
+    -y
+
+# ---------------------------------------------------
+# Install LlamaIndex ecosystem
+# ---------------------------------------------------
+
+pip install -U \
+    llama-index \
+    llama-index-core \
+    llama-index-llms-openai \
+    llama-index-llms-cohere \
+    llama-index-embeddings-openai \
+    llama-index-embeddings-cohere \
+    llama-index-vector-stores-qdrant \
+    llama-index-readers-file \
+    llama-index-postprocessor-cohere-rerank \
+    openai \
+    cohere \
+    qdrant-client
+
+# ---------------------------------------------------
+# Register Jupyter kernel
+# ---------------------------------------------------
+
+python -m ipykernel install \
+    --user \
+    --name="$ENV_NAME" \
+    --display-name="Python (${ENV_NAME})"
+
+# ---------------------------------------------------
+# Create .env
+# ---------------------------------------------------
+
+if [ ! -f .env ]; then
+
+cat << EOF > .env
+OPENAI_API_KEY=
+COHERE_API_KEY=
+EOF
+
+fi
+
+# ---------------------------------------------------
+# Verify installation
+# ---------------------------------------------------
+
+echo
+echo "========================================="
+echo "Installed Versions"
+echo "========================================="
+
+python << EOF
+import llama_index
+import openai
+import cohere
+import qdrant_client
+
+print("LlamaIndex :", getattr(llama_index, "__version__", "unknown"))
+print("OpenAI     :", openai.__version__)
+print("Cohere     :", cohere.__version__)
+print("Qdrant     :", qdrant_client.__version__)
+EOF
+
+pip freeze > requirements.txt
+
+conda env export --no-builds > environment.yml
+
+echo
+echo "========================================="
+echo "Setup Complete!"
+echo "========================================="
+echo
+echo "Activate:"
+echo "    conda activate ${ENV_NAME}"
+echo
+echo "Start:"
+echo "    jupyter lab"
+echo
+echo "Kernel:"
+echo "    Python (${ENV_NAME})"
